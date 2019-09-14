@@ -86,7 +86,6 @@ std::shared_ptr<ev3::Process> Drawer::calibrate() {
 		leftMotor->resetEncoder();
 		rightMotor->resetEncoder();
 		isCalibrated = true;
-		throw 100;
 	});
 	sequence->addProcess(std::dynamic_pointer_cast<ev3::Process>(process));
 
