@@ -25,13 +25,17 @@ Drawer::Drawer(const MotorPtr &leftMotor, const MotorPtr &rightMotor, const Moto
 	, leftButton(leftButton)
 	, rightButton(rightButton)
 
-	, leftJoint(-3.5f, -6.0f)
-	, rightJoint(3.5f, -6.0f)
+	, leftJoint(-3.5f, -10.0f)
+	, rightJoint(3.5f, -10.0f)
 	, arm1(11.0f)
 	, arm2(14.0f)
+	, zeroLeftAngle(getNonCorrectedAlphaFromPosition(leftJoint, Point(0, 0)))
+	, zeroRightAngle(getNonCorrectedAlphaFromPosition(rightJoint, Point(0, 0)))
 {
 	leftMotor->setMaxAccelleration(100000);
 	rightMotor->setMaxAccelleration(100000);
+
+
 }
 
 Drawer::~Drawer() {
@@ -117,11 +121,14 @@ std::shared_ptr<ev3::Process> Drawer::penDown() {
 // move pen to specified position
 std::shared_ptr<ev3::Process> Drawer::moveTo(const Point &position) {
 
-	float angleLeft = getAlphaFromPosition(leftJoint, position) * 180 / M_PI;
-	float angleRight = getAlphaFromPosition(rightJoint, position) * 180 / M_PI;
+	float angleLeft = getAlphaFromPosition(leftJoint, position);
+	float angleRight = getAlphaFromPosition(rightJoint, position);
 
-	float targetEncoderLeft = ((angleLeft-14.) * 2970. / (90.-14.));
-	float targetEncoderRight = ((angleRight-14.) * 2970. / (90.-14.));
+	float targetEncoderLeft = angleLeft * 2970.f / 90.f;
+	float targetEncoderRight = angleRight * 2970.f / 90.f;
+
+	AppState::shared->ev3->lcdPrintf(ev3::EV3::Color::BLACK, "src: %0.2f %0.2f\n", position.x, position.y);
+	AppState::shared->ev3->lcdPrintf(ev3::EV3::Color::BLACK, "dst: %0.2f %0.2f\n", angleLeft, angleRight);
 
 	auto pdLeft = std::shared_ptr<ev3::PD>(new ev3::PD());
 	pdLeft->setError(ev3::WireF(targetEncoderLeft) - ev3::WireF(leftMotor->getEncoder()));
@@ -133,8 +140,8 @@ std::shared_ptr<ev3::Process> Drawer::moveTo(const Point &position) {
 		pdLeft->update(timestamp);
 		pdRight->update(timestamp);
 
-		leftMotor->setPower(fmaxf(fminf(pdLeft->getPower().getValue(), 100.0f), -100.0f));
-		rightMotor->setPower(fmaxf(fminf(pdRight->getPower().getValue(), 100.0f), -100.0f));
+		leftMotor->setPower(fmaxf(fminf(pdLeft->getPower().getValue() * 10, MAX_POWER), -MAX_POWER));
+		rightMotor->setPower(fmaxf(fminf(pdRight->getPower().getValue() * 10, MAX_POWER), -MAX_POWER));
 
 		if (fabsf(targetEncoderLeft - leftMotor->getEncoder().getValue()) < 5
 				&& fabsf(targetEncoderRight - rightMotor->getEncoder().getValue()) < 5) {
@@ -142,7 +149,8 @@ std::shared_ptr<ev3::Process> Drawer::moveTo(const Point &position) {
 		}
 
 		return true;
-	}, [&](float) {
+	}, [=](float) {
+		AppState::shared->ev3->lcdPrintf(ev3::EV3::Color::BLACK, "moveTo done\n");
 		leftMotor->setPower(0);
 		rightMotor->setPower(0);
 	});
@@ -173,15 +181,29 @@ std::shared_ptr<ev3::Process> Drawer::drawLines(const std::vector<Polyline> &lin
 	return std::dynamic_pointer_cast<ev3::Process>(sequence);
 }
 
-float Drawer::getAlphaFromPosition(const Point &joint, const Point &target) {
+float Drawer::getNonCorrectedAlphaFromPosition(const Point &joint, const Point &target) {
 	float d = (target - joint).length();
 	float d1 = (d * d + arm1 * arm1 - arm2 * arm2) / 2 / d;
 	float h = sqrtf(arm1 * arm1 - d1 * d1);
 	Point P2 = joint + (target - joint) * (d * d + arm1 * arm1 - arm2 * arm2) / 2 / d / d;
-	float x3 = P2.x + h * (target.y - joint.y) / d;
-	float y3 = P2.y - h * (target.x - joint.x) / d;
+
+	float x3 = P2.x + h * (target.y - joint.y) / d * (joint.x < 0 ? -1 : 1);
+	float y3 = P2.y - h * (target.x - joint.x) / d * (joint.x < 0 ? -1 : 1);
 	float dx = x3 - joint.x;
 	float dy = y3 - joint.y;
-	return atan2f(dy, dx);
+	float alpha = atan2f(dy, dx) * 180 / M_PI;
+	if (joint.x < 0) {
+		return (180 - alpha);
+	} else {
+		return alpha;
+	}
+}
+
+float Drawer::getAlphaFromPosition(const Point &joint, const Point &target) {
+	if (joint.x < 0) {
+		return getNonCorrectedAlphaFromPosition(joint, target) - zeroLeftAngle;
+	} else {
+		return getNonCorrectedAlphaFromPosition(joint, target) - zeroRightAngle;
+	}
 }
 

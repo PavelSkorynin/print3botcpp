@@ -18,8 +18,6 @@ int main()
 	auto ev3 = std::make_shared<ev3::EV3>();
 	AppState::init(ev3);
 
-	try {
-
 	// init devices
 	auto leftMotor = ev3->getMotor(ev3::Motor::Port::A);
 	auto rightMotor = ev3->getMotor(ev3::Motor::Port::B);
@@ -36,38 +34,29 @@ int main()
 	rightMotor->setDirection(ev3::Motor::Direction::BACKWARD);
 	lifter->setDirection(ev3::Motor::Direction::FORWARD);
 
-	ev3->lcdPrintf(ev3::EV3::Color::BLACK, "start\n");
-	ev3->wait(1);
-
-	ev3->lcdPrintf(ev3::EV3::Color::BLACK, "init drawer\n");
 	Drawer drawer(leftMotor, rightMotor, lifter, leftButton, rightButton);
 
 	// read input
 	ev3->lcdPrintf(ev3::EV3::Color::BLACK, "run calibration\n");
 
-	ev3->wait(1);
 	// calibrate drawer
 	ev3->runProcess(drawer.calibrate());
-	ev3->lcdPrintf(ev3::EV3::Color::BLACK, "done\n");
-	ev3->wait(2);
+	ev3->lcdPrintf(ev3::EV3::Color::BLACK, "calibration done\n");
+	ev3->runProcess(drawer.penUp());
+
+	// draw triangle
+	auto polyline = std::vector<Point>();
+	polyline.push_back(Point(0, 0));
+	polyline.push_back(Point(10, 10));
+	polyline.push_back(Point(-10, 10));
+	polyline.push_back(Point(0, 0));
+
+	auto lines = std::vector<std::vector<Point>>();
+	lines.push_back(polyline);
+	ev3->runProcess(drawer.drawLines(lines));
+	ev3->wait(5);
 
 	// draw
-	}
-	catch (std::exception& e)
-	{
-		ev3->lcdPrintf(ev3::EV3::Color::BLACK, "exception: %s\n", e.what());
-		ev3->wait(2);
-	}
-	catch (int e)
-	{
-		ev3->lcdPrintf(ev3::EV3::Color::BLACK, "exception: %d\n", e);
-		ev3->wait(2);
-	}
-	catch (...) {
-		ev3->lcdPrintf(ev3::EV3::Color::BLACK, "unknown exception\n");
-		ev3->wait(2);
-	}
-
 	ev3.reset();
 	return 0;
 }

@@ -67,7 +67,10 @@ protected:
 	Point rightJoint; // B point
 	float arm1; // AC and BD distance
 	float arm2; // CE and ED distance
+	float zeroLeftAngle;
+	float zeroRightAngle;
 
+	float getNonCorrectedAlphaFromPosition(const Point &joint, const Point &target);
 	float getAlphaFromPosition(const Point &joint, const Point &target);
 };
 
